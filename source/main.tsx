@@ -243,6 +243,9 @@ export function parseArgs(argv: string[]) {
     } else if (arg === "skills" && !subcommandSeen) {
       flags.skills = true;
       subcommandSeen = true;
+    } else if (arg === "sessions" && !subcommandSeen) {
+      flags.sessions = true;
+      subcommandSeen = true;
     } else if (arg === "mcp" && !subcommandSeen) {
       flags.mcp = true;
       subcommandSeen = true;
@@ -250,7 +253,7 @@ export function parseArgs(argv: string[]) {
       flags.run = true;
       subcommandSeen = true;
     } else if (arg.startsWith("-")) {
-      if (subcommandSeen && (flags.agents || flags.skills || flags.mcp)) {
+      if (subcommandSeen && (flags.agents || flags.skills || flags.mcp || flags.sessions)) {
         flags._.push(arg);
       } else {
         const suggestion = findClosestFlag(arg);
@@ -283,11 +286,12 @@ export function parseArgs(argv: string[]) {
   }
   if (flags.agents && pos.length > 0) flags.agentsCommand = pos[0];
   if (flags.skills && pos.length > 0) flags.skillsCommand = pos[0];
+  if (flags.sessions && pos.length > 0) flags.sessionsCommand = pos[0];
   if (flags.mcp && pos.length > 0) flags.mcpCommand = pos[0];
   if (flags.run && pos.length > 0) flags.runPrompt = pos.join(" ");
   if (flags.print && pos.length > 0) flags.printPrompt = pos.join(" ");
   
-  if (!flags.update && !flags.agents && !flags.skills && !flags.mcp && !flags.run && !flags.print && pos.length > 0) {
+  if (!flags.update && !flags.agents && !flags.skills && !flags.sessions && !flags.mcp && !flags.run && !flags.print && pos.length > 0) {
      process.stderr.write(`error: unexpected arguments: ${pos.join(" ")}\n`);
      process.exit(1);
   }
@@ -561,6 +565,7 @@ export async function main() {
     $ agav update                  Update to the latest version
     $ agav agents [command]        Manage service agents
     $ agav skills [command]        Manage skills
+    $ agav sessions delete <id>    Delete a saved session (alias: rm)
     $ agav mcp auth <name>         Sign in to an OAuth-protected MCP server
     $ agav mcp logout <name>       Remove cached MCP OAuth credentials
     $ agav --print "prompt"
@@ -671,6 +676,16 @@ export async function main() {
       delegatedArgs.splice(Math.max(0, flags.delegatedSeparatorIndex - 1), 0, "--");
     }
     const exitCode = await runSkillsCommand(skillsCommand, delegatedArgs);
+    process.exit(exitCode);
+    return;
+  }
+
+  // Session management: agav sessions <command>
+  if (flags.sessions) {
+    const { runSessionsCommand } = await import("./cli/sessions-cli.js");
+    const sessionsCommand = typeof flags.sessionsCommand === "string" ? flags.sessionsCommand : undefined;
+    const delegatedArgs = (flags._ as string[]).slice(1);
+    const exitCode = await runSessionsCommand(sessionsCommand, delegatedArgs);
     process.exit(exitCode);
     return;
   }
