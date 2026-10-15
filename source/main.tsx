@@ -41,7 +41,7 @@ const KNOWN_FLAGS = [
   "--effort", "--auto-accept", "-y", "--stream", "--output-schema", "--deny-writes",
   "--resume", "-r", "--ollama-host", "--ollama-port", "--ollama-endpoint",
   "--cwd", "--ollama-api-key", "--print", "-P", "--permission", "--openai-api", "--max-turns", "--trajectory",
-  "--name",
+  "--name", "--search",
 ];
 
 function levenshtein(a: string, b: string): number {
@@ -144,7 +144,7 @@ export function parseArgs(argv: string[]) {
       i++;
       continue;
     }
-    
+
     if (arg === "--help" || arg === "-h") {
       flags.help = true;
     } else if (arg === "--version" || arg === "-v") {
@@ -234,6 +234,8 @@ export function parseArgs(argv: string[]) {
       flags.maxTurns = parseMaxTurns(argv[++i] ?? "");
     } else if (arg.startsWith("--max-turns=")) {
       flags.maxTurns = parseMaxTurns(arg.slice("--max-turns=".length));
+    } else if (arg === "--search") {
+      flags.search = true;
     } else if (arg === "update" && !subcommandSeen) {
       flags.update = true;
       subcommandSeen = true;
@@ -341,7 +343,7 @@ export async function runPipeMode(
     return 1;
   }
 
-  const toolRegistry = createToolRegistry();
+  const toolRegistry = createToolRegistry(config);
   // Headless execution has no session plan creation or plan context injection.
   // Do not advertise an updater that cannot work (or mutate another session's plan).
   toolRegistry.unregister("update_plan");
@@ -434,6 +436,13 @@ export async function runPipeMode(
       const expectsEdits = /\b(fix|patch|change|update|modify|edit|write|add|remove|delete|refactor|implement|create|replace|rewrite|migrate)\b/.test(prompt.toLowerCase());
       if (!expectsEdits) break;
 
+      // Stop instead of queuing another agent request once the allowance is exhausted.
+      if (iterationsBudget.remaining <= 0) {
+        process.stderr.write(`  ${icons.warning} Iteration budget exhausted (--max-turns=${config.maxIterations}); skipping no-edit retry.\n`);
+        exitCode = 1;
+        break;
+      }
+
       // Re-prompt: agent analyzed but didn't edit
       process.stderr.write(`  ${icons.warning} No edits made — re-prompting (attempt ${attempt + 2}/${maxRetries + 1})...\n`);
       conversation.addInternalUserMessage(NO_EDITS_PROMPT);
@@ -460,7 +469,7 @@ export async function runPipeMode(
       if (!validation.valid) {
         const details = formatValidationErrors(validation);
         if (iterationsBudget.remaining <= 0) {
-          process.stderr.write(`Error: Response failed JSON Schema validation; cannot retry because the agent reached maximum iterations: ${details}\n`);
+          process.stderr.write(`Error: Response failed JSON Schema validation: ${details}. Iteration budget exhausted (--max-turns=${config.maxIterations}); skipping schema-correction retry.\n`);
           return 1;
         }
         process.stderr.write(`Schema validation failed; retrying once: ${details}\n`);
@@ -532,7 +541,7 @@ export async function main() {
     const { resolve } = await import("node:path");
     const { statSync } = await import("node:fs");
     const targetDir = resolve(process.cwd(), flags.cwd);
-    
+
     let isDir = false;
     try {
       isDir = statSync(targetDir).isDirectory();
@@ -596,6 +605,7 @@ export async function main() {
                          Shared allowance for subagents, native agents, and skills;
                          continuations and retries retain it, new prompts reset it.
                          Tool execution itself does not spend an additional turn.
+    --search             Enable web search tool for this session
 
   Agent Commands
     $ agav agents list             List installed agents
@@ -746,6 +756,9 @@ export async function main() {
       process.exit(1);
     }
     config.effort = flags.effort;
+  }
+  if (flags.search === true) {
+    config.search = true;
   }
 
   if (!config.systemPrompt) {
