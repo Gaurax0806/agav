@@ -38,7 +38,34 @@ describe("sessions-cli", () => {
   it("fails if delete is called without session ID", async () => {
     const exitCode = await runSessionsCommand("delete", []);
     expect(exitCode).toBe(1);
+    expect(history.deleteSession).not.toHaveBeenCalled();
     expect(consoleErrorMock).toHaveBeenCalledWith(expect.stringContaining("No session ID provided"));
+  });
+
+  it("rejects empty or whitespace-only session ID for delete and does not call deleteSession", async () => {
+    vi.mocked(history.listSessions).mockResolvedValue([
+      { id: "session-abc-123", title: "Test", createdAt: "", model: "", provider: "", messages: [] },
+    ]);
+
+    for (const emptyId of ["", "   ", "\t", "\n"]) {
+      const exitCode = await runSessionsCommand("delete", [emptyId]);
+      expect(exitCode).toBe(1);
+      expect(history.deleteSession).not.toHaveBeenCalled();
+      expect(consoleErrorMock).toHaveBeenCalledWith(expect.stringContaining("No session ID provided"));
+    }
+  });
+
+  it("rejects empty or whitespace-only session ID for rm and does not call deleteSession", async () => {
+    vi.mocked(history.listSessions).mockResolvedValue([
+      { id: "session-abc-123", title: "Test", createdAt: "", model: "", provider: "", messages: [] },
+    ]);
+
+    for (const emptyId of ["", "   ", "\t", "\n"]) {
+      const exitCode = await runSessionsCommand("rm", [emptyId]);
+      expect(exitCode).toBe(1);
+      expect(history.deleteSession).not.toHaveBeenCalled();
+      expect(consoleErrorMock).toHaveBeenCalledWith(expect.stringContaining("No session ID provided"));
+    }
   });
 
   it("fails if extra arguments are provided to delete", async () => {

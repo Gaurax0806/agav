@@ -35,7 +35,13 @@ export async function runSessionsCommand(
         return 1;
       }
 
-      const id = args[0]!;
+      const id = args[0]!.trim();
+      if (!id) {
+        console.error("\nError: No session ID provided.");
+        console.error("Usage: agav sessions delete <session-id>\n");
+        return 1;
+      }
+
       const sessions = await listSessions();
 
       // Support exact ID match or unique prefix matching
